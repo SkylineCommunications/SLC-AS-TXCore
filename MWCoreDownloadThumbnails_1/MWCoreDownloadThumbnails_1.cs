@@ -51,6 +51,9 @@ dd/mm/2023	1.0.0.1		FME, Skyline	Initial version
 
 namespace DownloadThumbnails_1
 {
+	using Newtonsoft.Json;
+	using Skyline.DataMiner.Automation;
+	using Skyline.DataMiner.Net.Messages;
 	using System;
 	using System.Collections.Generic;
 	using System.IO;
@@ -59,9 +62,6 @@ namespace DownloadThumbnails_1
 	using System.Security.Cryptography.X509Certificates;
 	using System.Text.RegularExpressions;
 	using System.Threading.Tasks;
-	using Newtonsoft.Json;
-	using Skyline.DataMiner.Automation;
-	using Skyline.DataMiner.Net.Messages;
 
 	/// <summary>
 	/// Represents a DataMiner Automation script.
@@ -79,39 +79,46 @@ namespace DownloadThumbnails_1
 		/// <param name="engine">Link with SLAutomation process.</param>
 		public void Run(IEngine engine)
 		{
-			var element = engine.GetDummy("MWCore Element");
-
-			if (!element.IsActive)
+			try
 			{
-				engine.GenerateInformation("[Techex MWCore Thumbnails] Techex MWCore element is not active.");
-				return;
+				var element = engine.GetDummy("MWCore Element");
+
+				if (!element.IsActive)
+				{
+					engine.GenerateInformation("[Techex MWCore Thumbnails] Techex MWCore element is not active.");
+					return;
+				}
+
+				var responseTable = engine.SendSLNetSingleResponseMessage(new GetPartialTableMessage
+				{
+					DataMinerID = element.DmaId,
+					ElementID = element.ElementId,
+					ParameterID = 8700, // streams,
+					Filters = new[] { "forceFullTable=true" /*, "column=xx,yy"*/ },
+				}) as ParameterChangeEventMessage;
+
+				if (!responseTable.NewValue.IsArray)
+				{
+					engine.GenerateInformation("[Techex MWCore Thumbnails] Thumbnails column empty.");
+					return;
+				}
+
+				var cols = responseTable.NewValue.ArrayValue[0].ArrayValue;
+				string[] thumbnails = new string[cols.Length];
+				for (int idxRow = 0; idxRow < cols.Length; idxRow++)
+				{
+					// start of row 'idxRow'
+					thumbnails[idxRow] = responseTable.NewValue.GetTableCell(idxRow, 9)?.CellValue.GetAsStringValue().Replace(@"http://https//", "https://");
+				}
+
+				string token = string.Empty;
+				Task.Run(async () => { token = await Thumbnail.Login(_loginEntrypoint, _user, _password); }).Wait();
+				RequestStreamThumbnail(engine, thumbnails, token);
 			}
-
-			var responseTable = engine.SendSLNetSingleResponseMessage(new GetPartialTableMessage
+			catch (Exception ex)
 			{
-				DataMinerID = element.DmaId,
-				ElementID = element.ElementId,
-				ParameterID = 8700, // streams,
-				Filters = new[] { "forceFullTable=true" /*, "column=xx,yy"*/ },
-			}) as ParameterChangeEventMessage;
-
-			if (!responseTable.NewValue.IsArray)
-			{
-				engine.GenerateInformation("[Techex MWCore Thumbnails] Thumbnails column empty.");
-				return;
+				engine.ExitFail($"[Techex MWCore Thumbnails] Exception: {ex}");
 			}
-
-			var cols = responseTable.NewValue.ArrayValue[0].ArrayValue;
-			string[] thumbnails = new string[cols.Length];
-			for (int idxRow = 0; idxRow < cols.Length; idxRow++)
-			{
-				// start of row 'idxRow'
-				thumbnails[idxRow] = responseTable.NewValue.GetTableCell(idxRow, 9)?.CellValue.GetAsStringValue().Replace(@"http://https//", "https://");
-			}
-
-			string token = string.Empty;
-			Task.Run(async () => { token = await Thumbnail.Login(_loginEntrypoint, _user, _password); }).Wait();
-			RequestStreamThumbnail(engine, thumbnails, token);
 		}
 
 		private static void RequestStreamThumbnail(IEngine engine, IEnumerable<string> thumbnails, string token)
@@ -160,7 +167,7 @@ namespace DownloadThumbnails_1
 		public static async Task<string> Login(string url, string user, string password)
 		{
 			string token = string.Empty;
-			using (HttpClient client = new HttpClient())
+			using (HttpClient client = new HttpClient(CreateInsecureHandler()))
 			{
 				//login
 				var request = new HttpRequestMessage(HttpMethod.Post, url);
