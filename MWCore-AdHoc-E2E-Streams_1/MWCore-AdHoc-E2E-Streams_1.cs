@@ -55,22 +55,24 @@ namespace GQIIntegrationSPI
 	using System.Collections.Generic;
 	using System.IO;
 	using System.Linq;
+
 	using MWCoreAdHocE2EStreams_1.Misc;
+
 	using Skyline.DataMiner.Analytics.GenericInterface;
-	using Skyline.DataMiner.Net.Messages;
 
 	[GQIMetaData(Name = "MWCore E2E Stream")]
 	public class GQIDataSourceAdHocE2EStreams : IGQIDataSource, IGQIInputArguments, IGQIOnInit
 	{
-		private GQIStringArgument _argumentEdgeName = new GQIStringArgument("MWEdge Name") { IsRequired = true };
-		private GQIStringArgument _argumentElementName = new GQIStringArgument("Element Name") { IsRequired = true };
-		private GQIStringArgument _argumentStreamName = new GQIStringArgument("Stream Name") { IsRequired = true };
-		private bool _debug = false;
+		private readonly GQIStringArgument _argumentEdgeName = new GQIStringArgument("MWEdge Name") { IsRequired = true };
+		private readonly GQIStringArgument _argumentElementName = new GQIStringArgument("Element Name") { IsRequired = true };
+		private readonly GQIStringArgument _argumentStreamName = new GQIStringArgument("Stream Name") { IsRequired = true };
+		private readonly bool _debug = true;
+		private readonly string file = $"C:\\Users\\SamuelDT\\Downloads\\e2eLog-Parallel-{DateTime.Now.ToOADate()}.txt";
+
 		private GQIDMS _dms;
 		private string _edgeName;
 		private string _elementName;
 		private string _streamName;
-		private string file = $"C:\\Users\\FlavioME\\Downloads\\e2eLog-{DateTime.Now.ToOADate()}.txt";
 
 		public GQIColumn[] GetColumns()
 		{
@@ -107,28 +109,33 @@ namespace GQIIntegrationSPI
 			GQIRow[] data2retrieve;
 			if (_debug)
 			{
-				string text = $"--------{DateTime.Now}---------{Environment.NewLine}";
+				string text = $"--------{DateTime.Now}---------{Environment.NewLine}{_edgeName}/{_streamName}{Environment.NewLine}";
 				File.WriteAllText(file, text);
 			}
 
 			try
 			{
 				var streams = StreamsIO.Instance(_dms, _elementName);
+				if (_debug)
+				{
+					File.AppendAllText(file, $"Time: {DateTime.Now}\nEnded GetInstance!\n");
+				}
+
 				var hops = StreamsIO.GetHops(streams, _edgeName, _streamName);
 
 				if (_debug)
 				{
-					File.AppendAllText(file, "Ended GetHops loop!\n");
+					File.AppendAllText(file, $"Time: {DateTime.Now}\nEnded GetHops loop!\n");
 				}
 
 				List<GQIRow> rows = new List<GQIRow>();
 				foreach (var hop in hops)
 				{
 					rows.Add(new GQIRow(new[]
-						{
+					{
 						new GQICell { Value = hop.Id_Src}, // IO ID SRC
 						new GQICell { Value = hop.Name_Src}, // IO Name SRC
-						new GQICell { Value = hop.IOType == 0 ? "Source" : "Output" }, // IO Type SRC
+						new GQICell { Value = hop.IOType == 0 ? "Source" : "Output" }, // IO SRC
 						new GQICell { Value = hop.Status_Src}, // IO State SRC
 						new GQICell { Value = hop.Type_Src}, // IO Type SRC
 						new GQICell { Value = hop.Bitrate_Src}, // Bitrate SRC
@@ -141,39 +148,38 @@ namespace GQIIntegrationSPI
 						new GQICell { Value = hop.Bitrate_Dst}, // Bitrate SRC
 						new GQICell { Value = hop.Stream_Dst}, // Stream Name SRC
 						new GQICell { Value = hop.MWEdge_Dst}, // Edge Name SRC
-						new GQICell { Value = hop.Hop_Number == 1 && hop.IOType != 0 ? true : hop.Starting_Point},
+						new GQICell { Value = (hop.Hop_Number == 1 && hop.IOType != 0) || hop.Starting_Point},
 						new GQICell { Value = hop.Hop_Number},
 						new GQICell { Value = hop.IsActive},
 					}));
 				}
 
 				// adding an extra line to facilitate the node-edge component
-				//var lastHop = hops.OrderBy(x => x.Hop_Number).Last();
 				var lastOutputs = hops.Where(x => x.IOType == IOType.Input && x.Hop_Number == hops.Max(y => y.Hop_Number));
 
 				foreach (var lastHop in lastOutputs)
 				{
 					rows.Add(new GQIRow(new[]
-							{
-							new GQICell { Value = lastHop.Id_Dst }, // IO ID SRC
-							new GQICell { Value = lastHop.Name_Dst }, // IO Name SRC
-							new GQICell { Value = "Output" }, // IO Type SRC
-							new GQICell { Value = lastHop.Status_Dst }, // IO State SRC
-							new GQICell { Value = lastHop.Type_Dst }, // IO Type SRC
-							new GQICell { Value = lastHop.Bitrate_Dst }, // Bitrate SRC
-							new GQICell { Value = lastHop.Stream_Dst }, // Stream Name SRC
-							new GQICell { Value = lastHop.MWEdge_Dst }, // Edge Name SRC
-							new GQICell { Value = string.Empty }, // IO ID SRC
-							new GQICell { Value = string.Empty }, // IO Name SRC
-							new GQICell { Value = string.Empty }, // IO State SRC
-							new GQICell { Value = string.Empty }, // IO Type SRC
-							new GQICell { Value = 0d }, // Bitrate SRC
-							new GQICell { Value = string.Empty }, // Stream Name SRC
-							new GQICell { Value = string.Empty }, // Edge Name SRC
-							new GQICell { Value = lastHop.Starting_Point},
-							new GQICell { Value = lastHop.Hop_Number},
-							new GQICell { Value = lastHop.IsActive},
-						}));
+					{
+						new GQICell { Value = lastHop.Id_Dst }, // IO ID SRC
+						new GQICell { Value = lastHop.Name_Dst }, // IO Name SRC
+						new GQICell { Value = "Output" }, // IO Type SRC
+						new GQICell { Value = lastHop.Status_Dst }, // IO State SRC
+						new GQICell { Value = lastHop.Type_Dst }, // IO Type SRC
+						new GQICell { Value = lastHop.Bitrate_Dst }, // Bitrate SRC
+						new GQICell { Value = lastHop.Stream_Dst }, // Stream Name SRC
+						new GQICell { Value = lastHop.MWEdge_Dst }, // Edge Name SRC
+						new GQICell { Value = string.Empty }, // IO ID SRC
+						new GQICell { Value = string.Empty }, // IO Name SRC
+						new GQICell { Value = string.Empty }, // IO State SRC
+						new GQICell { Value = string.Empty }, // IO Type SRC
+						new GQICell { Value = 0d }, // Bitrate SRC
+						new GQICell { Value = string.Empty }, // Stream Name SRC
+						new GQICell { Value = string.Empty }, // Edge Name SRC
+						new GQICell { Value = lastHop.Starting_Point},
+						new GQICell { Value = lastHop.Hop_Number},
+						new GQICell { Value = lastHop.IsActive},
+					}));
 				}
 
 				data2retrieve = rows.ToArray();
@@ -187,6 +193,12 @@ namespace GQIIntegrationSPI
 
 				data2retrieve = new GQIRow[0];
 			}
+
+			if (_debug)
+			{
+				File.AppendAllText(file, $"End Time: {DateTime.Now}\n");
+			}
+
 			return new GQIPage(data2retrieve)
 			{
 				HasNextPage = false,
