@@ -77,9 +77,11 @@ namespace MWCoreStreamAlarms_1
 			InputSourceTablePid = 9600,
 			InputSourcesStreamFkIdx = 22,
 			InputSourcesStreamFkPid = 9623,
+			InputputStatisticsTablePid = 11200,
 			OutputTablePid = 8900,
 			OutputStreamFkIdx = 7,
 			OutputStreamFkPid = 8908,
+			OutputStatisticsTablePid = 11400,
 			StreamsTablePid = 8700,
 			StreamsTsSeverityIdx = 11,
 			StreamsTsSeverityPid = 8712,
@@ -108,12 +110,12 @@ namespace MWCoreStreamAlarms_1
 			{
 				ProcessTransportStreamAlarm(engine, element, parameterIdx, severity);
 			}
-			else if (Regex.IsMatch(parameterID, @"89\d\d"))
+			else if (Regex.IsMatch(parameterID, @"114\d\d"))
 			{
 				var dmsElement = dms.GetElement(new DmsElementId(element.DmaId, element.ElementId));
 				ProcessOutputAlarm(engine, element, dmsElement, parameterIdx, severity);
 			}
-			else if (Regex.IsMatch(parameterID, @"96\d\d"))
+			else if (Regex.IsMatch(parameterID, @"112\d\d"))
 			{
 				var dmsElement = dms.GetElement(new DmsElementId(element.DmaId, element.ElementId));
 				ProcessInputAlarm(engine, element, dmsElement, parameterIdx, severity);
@@ -141,7 +143,7 @@ namespace MWCoreStreamAlarms_1
 
 		private static void ProcessInputAlarm(IEngine engine, Element element, IDmsElement dmsElement, string parameterIdx, EnumSeverity severity)
 		{
-			var inputSourceKey = element.GetTableKeyMappings((int)Parameters.InputSourceTablePid).MapToKey(parameterIdx);
+			var inputSourceKey = element.GetTableKeyMappings((int)Parameters.InputputStatisticsTablePid).MapToKey(parameterIdx);
 			var streamPk = Convert.ToString(element.GetParameterByPrimaryKey((int)Parameters.InputSourcesStreamFkPid, inputSourceKey));
 			var currentSeverity = Convert.ToInt32(element.GetParameterByPrimaryKey((int)Parameters.StreamsTsSeverityPid, streamPk));
 			List<string> values = GetAllStreamInputsAndOuputs(dmsElement, streamPk);
@@ -173,7 +175,7 @@ namespace MWCoreStreamAlarms_1
 
 		private static void ProcessOutputAlarm(IEngine engine, Element element, IDmsElement dmsElement, string parameterIdx, EnumSeverity severity)
 		{
-			var outputKey = element.GetTableKeyMappings((int)Parameters.OutputTablePid).MapToKey(parameterIdx);
+			var outputKey = element.GetTableKeyMappings((int)Parameters.OutputStatisticsTablePid).MapToKey(parameterIdx);
 			var streamPk = Convert.ToString(element.GetParameterByPrimaryKey((int)Parameters.OutputStreamFkPid, outputKey));
 			var currentSeverity = Convert.ToInt32(element.GetParameterByPrimaryKey((int)Parameters.StreamsTsSeverityPid, streamPk));
 			List<string> values = GetAllStreamInputsAndOuputs(dmsElement, streamPk);

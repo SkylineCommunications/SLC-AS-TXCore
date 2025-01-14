@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <DMSScript options="272" xmlns="http://www.skyline.be/automation">
 	<Name>MWCore_AdHoc-E2E-Streams</Name>
-	<Description></Description>
+	<Description>MWCore_AdHoc-E2E-Streams</Description>
 	<Type>Automation</Type>
 	<Author>SKYLINE2\FlavioME</Author>
 	<CheckSets>FALSE</CheckSets>
@@ -21,8 +21,6 @@
 			<Value><![CDATA[[Project:MWCore-AdHoc-E2E-Streams_1]]]></Value>
 			<Param type="preCompile">true</Param>
 			<Param type="libraryName">MWCoreAdHocE2EStreams</Param>
-			<!--<Param type="debug">true</Param>-->
-			<Message></Message>
 		</Exe>
 	</Script>
 </DMSScript>

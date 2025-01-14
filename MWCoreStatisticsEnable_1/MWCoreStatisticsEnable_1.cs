@@ -65,17 +65,19 @@ namespace MWCoreStatisticsEnable_1
 		/// <param name="engine">Link with SLAutomation process.</param>
 		public void Run(IEngine engine)
 		{
-			var element = engine.GetDummy("MWCore Element");
+			var mwcoreServer = engine.GetScriptParam("MWCore Server ID").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
+			var mwcoreElementName = engine.GetScriptParam("MWCore Element Name").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
 
-			if (!element.IsActive)
+			var element = engine.FindElement(mwcoreElementName);
+
+			if (element == null ||
+				!element.IsActive)
 			{
-				engine.GenerateInformation("[Techex MWCore Statistics] Techex MWCore element is not active.");
+				engine.GenerateInformation($"[Techex MWCore Statistics] Techex MWCore element is not active! Element Name: {mwcoreElementName}");
 				return;
 			}
 
 			string[] servers;
-			var mwcoreServer = engine.GetScriptParam("MWCore Server").Value;
-
 			if (string.IsNullOrWhiteSpace(mwcoreServer) ||
 				mwcoreServer.ToUpper() == "ALL")
 			{
@@ -88,15 +90,11 @@ namespace MWCoreStatisticsEnable_1
 
 			foreach (var server in servers)
 			{
-				var state = Convert.ToString(element.GetParameter(1417, server)); // statistics column
+				var state = Convert.ToString(element.GetParameterByPrimaryKey(1417, server)); // statistics column
+				var currentState = state.Equals("1");
 
-				if (state == "1") // enable
-				{
-					continue;
-				}
-
-				engine.GenerateInformation($"[Techex MWCore Statistics] Enable statistics for {server.Replace("[\"", string.Empty).Replace("\"]", string.Empty)}.");
-				element.SetParameterByPrimaryKey(1417, server.Replace("[\"", string.Empty).Replace("\"]", string.Empty), 1); // enable statistics
+				engine.GenerateInformation($"[Techex MWCore Statistics] Update statistics connection for {server}.");
+				element.SetParameterByPrimaryKey(1417, server, currentState ? 0 : 1); // invert state (toggle button)
 			}
 		}
 	}

@@ -8,12 +8,6 @@
 	<Folder>Techex MWCore</Folder>
 
 	<Protocols>
-		<Protocol id="10">
-			<Description>MWCore Element</Description>
-			<Name>Techex MWCore</Name>
-			<Version>Production</Version>
-			<DefaultElement></DefaultElement>
-		</Protocol>
 	</Protocols>
 
 	<Memory>
@@ -21,7 +15,10 @@
 
 	<Parameters>
 		<ScriptParameter id="20" type="string" values="">
-			<Description>MWCore Server</Description>
+			<Description>MWCore Server ID</Description>
+		</ScriptParameter>
+		<ScriptParameter id="21" type="string" values="">
+			<Description>MWCore Element Name</Description>
 		</ScriptParameter>
 	</Parameters>
 
