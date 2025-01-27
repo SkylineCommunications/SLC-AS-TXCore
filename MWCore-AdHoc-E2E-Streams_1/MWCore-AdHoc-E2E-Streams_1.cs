@@ -53,12 +53,12 @@ namespace GQIIntegrationSPI
 {
 	using System;
 	using System.Collections.Generic;
-	using System.IO;
 	using System.Linq;
-
 	using MWCoreAdHocE2EStreams_1.Misc;
-
 	using Skyline.DataMiner.Analytics.GenericInterface;
+
+	//using Skyline.DataMiner.Utils.TXCore.Cache;
+	//using Skyline.DataMiner.Utils.TXCore.Cache.Misc.Enums;
 
 	[GQIMetaData(Name = "MWCore E2E Stream")]
 	public class GQIDataSourceAdHocE2EStreams : IGQIDataSource, IGQIInputArguments, IGQIOnInit
@@ -66,13 +66,14 @@ namespace GQIIntegrationSPI
 		private readonly GQIStringArgument _argumentEdgeName = new GQIStringArgument("MWEdge Name") { IsRequired = true };
 		private readonly GQIStringArgument _argumentElementName = new GQIStringArgument("Element Name") { IsRequired = true };
 		private readonly GQIStringArgument _argumentStreamName = new GQIStringArgument("Stream Name") { IsRequired = true };
-		private readonly bool _debug = true;
-		private readonly string file = $"C:\\Users\\SamuelDT\\Downloads\\e2eLog-Parallel-{DateTime.Now.ToOADate()}.txt";
+		private readonly bool _debug = true; // C:\Skyline DataMiner\Logging\GQI\Ad hoc data sources
 
 		private GQIDMS _dms;
 		private string _edgeName;
 		private string _elementName;
 		private string _streamName;
+		private IGQILogger _logger;
+		private bool _hasnextpage;
 
 		public GQIColumn[] GetColumns()
 		{
@@ -107,32 +108,64 @@ namespace GQIIntegrationSPI
 		public GQIPage GetNextPage(GetNextPageInputArgs args)
 		{
 			GQIRow[] data2retrieve;
-			if (_debug)
-			{
-				string text = $"--------{DateTime.Now}---------{Environment.NewLine}{_edgeName}/{_streamName}{Environment.NewLine}";
-				File.WriteAllText(file, text);
-			}
-
 			try
 			{
-				var streams = StreamsIO.Instance(_dms, _elementName);
 				if (_debug)
 				{
-					File.AppendAllText(file, $"Time: {DateTime.Now}\nEnded GetInstance!\n");
+					_logger.Debug($"{_edgeName}/{_streamName}");
 				}
 
-				var hops = StreamsIO.GetHops(streams, _edgeName, _streamName);
+				StreamsIO streams;
+				streams = StreamsIO.Instance(_dms, _logger, _elementName);
+
+				if (streams == default)
+				{
+					return new GQIPage(new GQIRow[0]);
+				}
 
 				if (_debug)
 				{
-					File.AppendAllText(file, $"Time: {DateTime.Now}\nEnded GetHops loop!\n");
+					_logger.Debug($"Ended GetInstance!");
 				}
 
-				List<GQIRow> rows = new List<GQIRow>();
-				foreach (var hop in hops)
+				var hops = streams.GetHops(_edgeName, _streamName);
+
+				if (_debug)
 				{
-					rows.Add(new GQIRow(new[]
-					{
+					_logger.Debug($"Ended GetHops loop!");
+				}
+
+				data2retrieve = RetrieveToGqi(hops);
+			}
+			catch (Exception ex)
+			{
+				if (_debug)
+				{
+					_logger.Debug($"Exception: {ex}");
+				}
+
+				data2retrieve = new GQIRow[0];
+			}
+
+			if (_debug)
+			{
+				_logger.Debug($"Completed {_edgeName}/{_streamName}!");
+			}
+
+			return new GQIPage(data2retrieve)
+			{
+				HasNextPage = false,
+			};
+		}
+
+		private static GQIRow[] RetrieveToGqi(HashSet<Hop> hops)
+		{
+			GQIRow[] data2retrieve;
+			List<GQIRow> rows = new List<GQIRow>();
+			foreach (var hop in hops)
+			{
+				rows.Add(new GQIRow(new[]
+				{
 						new GQICell { Value = hop.Id_Src}, // IO ID SRC
 						new GQICell { Value = hop.Name_Src}, // IO Name SRC
 						new GQICell { Value = hop.IOType == 0 ? "Source" : "Output" }, // IO SRC
@@ -152,15 +185,15 @@ namespace GQIIntegrationSPI
 						new GQICell { Value = hop.Hop_Number},
 						new GQICell { Value = hop.IsActive},
 					}));
-				}
+			}
 
-				// adding an extra line to facilitate the node-edge component
-				var lastOutputs = hops.Where(x => x.IOType == IOType.Input && x.Hop_Number == hops.Max(y => y.Hop_Number));
+			// adding an extra line to facilitate the node-edge component
+			var lastOutputs = hops.Where(x => x.IOType == IOType.Input && x.Hop_Number == hops.Max(y => y.Hop_Number));
 
-				foreach (var lastHop in lastOutputs)
+			foreach (var lastHop in lastOutputs)
+			{
+				rows.Add(new GQIRow(new[]
 				{
-					rows.Add(new GQIRow(new[]
-					{
 						new GQICell { Value = lastHop.Id_Dst }, // IO ID SRC
 						new GQICell { Value = lastHop.Name_Dst }, // IO Name SRC
 						new GQICell { Value = "Output" }, // IO Type SRC
@@ -180,29 +213,10 @@ namespace GQIIntegrationSPI
 						new GQICell { Value = lastHop.Hop_Number},
 						new GQICell { Value = lastHop.IsActive},
 					}));
-				}
-
-				data2retrieve = rows.ToArray();
-			}
-			catch (Exception ex)
-			{
-				if (_debug)
-				{
-					File.AppendAllText(file, $"Exception: {ex}\n");
-				}
-
-				data2retrieve = new GQIRow[0];
 			}
 
-			if (_debug)
-			{
-				File.AppendAllText(file, $"End Time: {DateTime.Now}\n");
-			}
-
-			return new GQIPage(data2retrieve)
-			{
-				HasNextPage = false,
-			};
+			data2retrieve = rows.ToArray();
+			return data2retrieve;
 		}
 
 		public OnArgumentsProcessedOutputArgs OnArgumentsProcessed(OnArgumentsProcessedInputArgs args)
@@ -216,6 +230,89 @@ namespace GQIIntegrationSPI
 		public OnInitOutputArgs OnInit(OnInitInputArgs args)
 		{
 			_dms = args.DMS;
+			_logger = args.Logger;
+			_logger.MinimumLogLevel = GQILogLevel.Debug;
+			return default;
+		}
+	}
+
+	[GQIMetaData(Name = "MWCore E2E Stream - Cache Refresh")]
+	public class GQIDataSourceAdHocE2EStreamsCacheRefresh : IGQIDataSource, IGQIInputArguments, IGQIOnInit
+	{
+		private readonly bool _debug = true; // C:\Skyline DataMiner\Logging\GQI\Ad hoc data sources
+
+		private GQIDMS _dms;
+		private IGQILogger _logger;
+		private bool _hasnextpage;
+
+		public GQIColumn[] GetColumns()
+		{
+			return new GQIColumn[]
+			{
+				new GQIStringColumn("IO ID SRC"),
+				new GQIStringColumn("IO Name SRC"),
+				new GQIStringColumn("IO SRC"),
+				new GQIStringColumn("IO State SRC"),
+				new GQIStringColumn("IO Type SRC"),
+				new GQIDoubleColumn("Bitrate SRC"),
+				new GQIStringColumn("Stream Name SRC"),
+				new GQIStringColumn("Edge Name SRC"),
+				new GQIStringColumn("IO ID DST"),
+				new GQIStringColumn("IO Name DST"),
+				new GQIStringColumn("IO State DST"),
+				new GQIStringColumn("IO Type DST"),
+				new GQIDoubleColumn("Bitrate DST"),
+				new GQIStringColumn("Stream Name DST"),
+				new GQIStringColumn("Edge Name DST"),
+				new GQIBooleanColumn("Starting Point"),
+				new GQIIntColumn("Hop"),
+				new GQIBooleanColumn("Active"),
+			};
+		}
+
+		public GQIArgument[] GetInputArguments()
+		{
+			return new GQIArgument[] { };
+		}
+
+		public GQIPage GetNextPage(GetNextPageInputArgs args)
+		{
+			try
+			{
+				if (_debug)
+				{
+					_logger.Debug($"Force refresh");
+				}
+
+				StreamsIO.Instance(_dms, _logger, string.Empty, true);
+
+				return new GQIPage(new GQIRow[0]);
+			}
+			catch (Exception ex)
+			{
+				if (_debug)
+				{
+					_logger.Debug($"Exception: {ex}");
+				}
+			}
+
+			_hasnextpage = !_hasnextpage;
+			return new GQIPage(new GQIRow[0])
+			{
+				HasNextPage = _hasnextpage,
+			};
+		}
+
+		public OnArgumentsProcessedOutputArgs OnArgumentsProcessed(OnArgumentsProcessedInputArgs args)
+		{
+			return new OnArgumentsProcessedOutputArgs();
+		}
+
+		public OnInitOutputArgs OnInit(OnInitInputArgs args)
+		{
+			_dms = args.DMS;
+			_logger = args.Logger;
+			_logger.MinimumLogLevel = GQILogLevel.Debug;
 			return default;
 		}
 	}
