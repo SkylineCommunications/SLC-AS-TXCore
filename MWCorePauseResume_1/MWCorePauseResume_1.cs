@@ -51,6 +51,8 @@ dd/mm/2023	1.0.0.1		FME, Skyline	Initial version
 
 namespace MWCorePauseResume_1
 {
+	using System.Collections.Generic;
+	using Newtonsoft.Json;
 	using Skyline.DataMiner.Automation;
 
 	/// <summary>
@@ -64,53 +66,64 @@ namespace MWCorePauseResume_1
 		/// <param name="engine">Link with SLAutomation process.</param>
 		public void Run(IEngine engine)
 		{
-			var elementName = engine.GetScriptParam("MWCore Element Name").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
-			var element = engine.FindElement(elementName);
-
-			if (!element.IsActive)
+			try
 			{
-				engine.GenerateInformation("[Techex MWCore Pause/Resume] Techex MWCore element is not active.");
-				return;
-			}
+				var elementName = engine.GetScriptParam("MWCore Element Name").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
+				var element = engine.FindElement(elementName);
 
-			var iotype = engine.GetScriptParam("IO Type").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
+				if (!element.IsActive)
+				{
+					engine.GenerateInformation("[Techex MWCore Pause/Resume] Techex MWCore element is not active.");
+					return;
+				}
 
-			int paramId = -1;
-			if (iotype == "Source")
-			{
-				paramId = 9721;
-			}
-			else if (iotype == "Output")
-			{
-				paramId = 7003;
-			}
-			else
-			{
-				engine.GenerateInformation("[Techex MWCore Pause/Resume] Invalid IO Type (Source or Output).");
-			}
+				var iotype = engine.GetScriptParam("IO Type").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
 
-			string statusToSet = string.Empty;
-			var status = engine.GetScriptParam("Status").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
-			if (status == "Pause")
-			{
-				statusToSet = "True";
-			}
-			else if (status == "Resume")
-			{
-				statusToSet = "False";
-			}
-			else
-			{
-				engine.GenerateInformation("[Techex MWCore Pause/Resume] Invalid Status (Pause or Resume).");
-			}
+				int paramId = -1;
+				if (iotype == "Source")
+				{
+					paramId = 9721;
+				}
+				else if (iotype == "Output")
+				{
+					paramId = 9003;
+				}
+				else
+				{
+					engine.GenerateInformation("[Techex MWCore Pause/Resume] Invalid IO Type (Source or Output).");
+				}
 
-			var iopk = engine.GetScriptParam("IO ID").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
+				string statusToSet = string.Empty;
+				var status = engine.GetScriptParam("Status").Value.Replace("[\"", string.Empty).Replace("\"]", string.Empty);
+				if (status == "Pause")
+				{
+					statusToSet = "True";
+				}
+				else if (status == "Resume")
+				{
+					statusToSet = "False";
+				}
+				else
+				{
+					engine.GenerateInformation("[Techex MWCore Pause/Resume] Invalid Status (Pause or Resume).");
+				}
 
-			engine.GenerateInformation($"[Techex MWCore Pause/Resume] Set {iotype} to {statusToSet}={status}.");
-			element.SetParameterByPrimaryKey(paramId, iopk, statusToSet); // enable statistics
+				var jsonid = engine.GetScriptParam("IO ID").Value;
+				var iopk = JsonConvert.DeserializeObject<List<string>>(jsonid)[0];
 
-			engine.Sleep(5000);
-			element.SetParameter(200, 1); //refresh
+				engine.GenerateInformation($"[Techex MWCore Pause/Resume] Set {iotype} to {statusToSet}={status} (PK: {iopk}).");
+
+				engine.SetFlag(RunTimeFlags.NoCheckingSets);
+				element.SetParameterByPrimaryKey(paramId, iopk, statusToSet); // enable statistics
+
+				engine.Sleep(3000);
+				element.SetParameter(200, 1); // refresh
+			}
+			catch (System.Exception ex)
+			{
+				engine.Log($"Exception: {ex}");
+				engine.ExitFail($"Error while updating port state.");
+			}
 		}
 	}
 }

@@ -18,6 +18,7 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 		private static readonly object _padlock = new object();
 		private static Dictionary<string, ElementCache> _instances = new Dictionary<string, ElementCache>();
 		private readonly GQIDMS _dms;
+		private Dictionary<string, HashSet<Hop>> _hops;
 
 		private StreamsIO(GQIDMS dms, string elementName)
 		{
@@ -49,6 +50,8 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 			}
 
 			OutputsTable = outputsTable;
+
+			_hops = new Dictionary<string, HashSet<Hop>>();
 		}
 
 		public IEnumerable<EdgeTable> EdgesTable { get; }
@@ -57,22 +60,44 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 
 		public IEnumerable<Iotable> OutputsTable { get; }
 
-		public static StreamsIO Instance(GQIDMS dms, string elementName)
+		public static StreamsIO Instance(GQIDMS dms, IGQILogger logger, string elementName = "", bool forceRefresh = false)
 		{
 			var now = DateTime.UtcNow;
 			ElementCache instance;
+			logger.Debug($"Element: {elementName}");
 
-			if (!_instances.TryGetValue(elementName, out instance) ||
-				(now - instance.LastRun) > TimeSpan.FromSeconds(_cachingTime))
+			if (forceRefresh /*&& !_instances.Keys.Any()*/)
+			{
+				var newInstances = new Dictionary<string, ElementCache>();
+				DMSMessage[] responseElement = dms.SendMessages(GetLiteElementInfo.ByProtocol("Techex MWCore", "Production"));// as LiteElementInfoEvent;
+				foreach (LiteElementInfoEvent item in responseElement)
+				{
+					logger.Debug($"Element: {item.Name}");
+					instance = new ElementCache(new StreamsIO(dms, item.Name), now);
+					newInstances[item.Name] = instance;
+				}
+
+				lock (_padlock)
+				{
+					_instances = newInstances;
+				}
+
+				return default;
+			}
+			else
 			{
 				lock (_padlock)
 				{
-					instance = new ElementCache(new StreamsIO(dms, elementName), now);
-					_instances[elementName] = instance;
+					if (!_instances.TryGetValue(elementName, out instance) ||
+						(now - instance.LastRun) > TimeSpan.FromSeconds(_cachingTime))
+					{
+						instance = new ElementCache(new StreamsIO(dms, elementName), now);
+						_instances[elementName] = instance;
+					}
+
+					return instance.Instance;
 				}
 			}
-
-			return instance.Instance;
 		}
 
 		/// <summary>
@@ -85,14 +110,23 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 		/// <returns>
 		/// A list of <see cref="Hop"/> objects, each representing a connection between inputs and outputs along with additional metadata.
 		/// </returns>
-		public static HashSet<Hop> GetHops(StreamsIO instance, string edgeName, string streamName)
+		public HashSet<Hop> GetHops(string edgeName, string streamName)
 		{
-			HashSet<Hop> hops = new HashSet<Hop>();
+			HashSet<Hop> hops;
+			string key = $"{edgeName}/{streamName}";
+			if (_hops.TryGetValue(key, out hops))
+			{
+				return hops;
+			}
+			else
+			{
+				hops = new HashSet<Hop>();
+			}
 
-			var inputs = new HashSet<Iotable>(instance.InputsTable.Where(input =>
+			var inputs = new HashSet<Iotable>(InputsTable.Where(input =>
 				input.Stream == streamName && input.MWEdge == edgeName && !input.Protocol.Equals("2022-7")));
 
-			var outputs = new HashSet<Iotable>(instance.OutputsTable.Where(output =>
+			var outputs = new HashSet<Iotable>(OutputsTable.Where(output =>
 				output.Stream == streamName && output.MWEdge == edgeName && output.Port != "-1"));
 
 			foreach (var input in inputs)
@@ -104,10 +138,12 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 			}
 
 			// Get next hop - look for inputs that are connected to the started outputs.
-			FindNextHop(instance, hops, outputs, 0);
+			FindNextHop(this, hops, outputs, 0);
 
 			// Get previous hop - look for outputs connected to the started inputs.
-			FindPreviousHop(instance, hops, inputs, 0);
+			FindPreviousHop(this, hops, inputs, 0);
+
+			_hops[key] = hops;
 
 			return hops;
 		}
