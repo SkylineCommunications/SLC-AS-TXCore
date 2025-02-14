@@ -46,169 +46,105 @@ Revision History:
 DATE		VERSION		AUTHOR			COMMENTS
 
 dd/mm/2023	1.0.0.1		FME, Skyline	Initial version
+12/02/2025	1.0.0.2		SDT, Skyline	Base64 thumbnails image.
 ****************************************************************************
 */
 
 namespace DownloadThumbnails_1
 {
-	using Newtonsoft.Json;
-	using Skyline.DataMiner.Automation;
-	using Skyline.DataMiner.Net.Messages;
 	using System;
 	using System.Collections.Generic;
-	using System.IO;
-	using System.Net.Http;
-	using System.Net.Security;
-	using System.Security.Cryptography.X509Certificates;
-	using System.Text.RegularExpressions;
-	using System.Threading.Tasks;
 
-	/// <summary>
-	/// Represents a DataMiner Automation script.
-	/// </summary>
-	public class Script
+	using MWCoreDownloadThumbnails_1.Misc;
+
+	using Skyline.DataMiner.Analytics.GenericInterface;
+
+	[GQIMetaData(Name = "MWCore Thumbnails")]
+	public class GQIDataSourceAdHocThumbnails : IGQIDataSource, IGQIInputArguments, IGQIOnInit
 	{
-		private const string _filesPath = "C:\\Skyline DataMiner\\Webpages\\TechexMWCoreThumbnails";
-		private const string _loginEntrypoint = "https://<url>/auth/signin";
-		private const string _password = "";
-		private const string _user = "";
+		private readonly GQIStringArgument _argumentElementName = new GQIStringArgument("Element Name") { IsRequired = true };
 
-		/// <summary>
-		/// The script entry point.
-		/// </summary>
-		/// <param name="engine">Link with SLAutomation process.</param>
-		public void Run(IEngine engine)
+		private GQIDMS _dms;
+		private IGQILogger _logger;
+		private string _elementName;
+
+		public GQIColumn[] GetColumns()
 		{
+			return new GQIColumn[]
+			{
+				new GQIStringColumn("ID"),
+				new GQIStringColumn("Display Key"),
+				new GQIStringColumn("MWEdge"),
+				new GQIStringColumn("Stream Name"),
+				new GQIStringColumn("Thumbnail Status"),
+				new GQIStringColumn("Thumbnail Link"),
+				new GQIStringColumn("Thumbnail"),
+				new GQIStringColumn("TS Sync Loss"),
+				new GQIStringColumn("CC Error Rate"),
+				new GQIStringColumn("TS Alarm"),
+				new GQIStringColumn("IP Alarm"),
+			};
+		}
+
+		public GQIPage GetNextPage(GetNextPageInputArgs args)
+		{
+			GQIRow[] data2retrieve;
 			try
 			{
-				var element = engine.GetDummy("MWCore Element");
+				var element = ElementCache.Instance(_dms, _logger, _elementName);
 
-				if (!element.IsActive)
+				List<GQIRow> rows = new List<GQIRow>();
+
+				foreach (var stream in element.Streams)
 				{
-					engine.GenerateInformation("[Techex MWCore Thumbnails] Techex MWCore element is not active.");
-					return;
+					rows.Add(new GQIRow(new[]
+					{
+						new GQICell { Value = stream.Id},
+						new GQICell { Value = stream.DisplayKey},
+						new GQICell { Value = stream.MWEdge},
+						new GQICell { Value = stream.StreamName},
+						new GQICell { Value = stream.ThumbnailStatus},
+						new GQICell { Value = stream.ThumbnailLink},
+						new GQICell { Value = stream.ThumbnailImage},
+						new GQICell { Value = stream.TsSyncLoss},
+						new GQICell { Value = stream.CcErrorRate},
+						new GQICell { Value = stream.TsAlarm},
+						new GQICell { Value = stream.IpAlarm},
+					}));
 				}
 
-				var responseTable = engine.SendSLNetSingleResponseMessage(new GetPartialTableMessage
-				{
-					DataMinerID = element.DmaId,
-					ElementID = element.ElementId,
-					ParameterID = 8700, // streams,
-					Filters = new[] { "forceFullTable=true" /*, "column=xx,yy"*/ },
-				}) as ParameterChangeEventMessage;
-
-				if (!responseTable.NewValue.IsArray)
-				{
-					engine.GenerateInformation("[Techex MWCore Thumbnails] Thumbnails column empty.");
-					return;
-				}
-
-				var cols = responseTable.NewValue.ArrayValue[0].ArrayValue;
-				string[] thumbnails = new string[cols.Length];
-				for (int idxRow = 0; idxRow < cols.Length; idxRow++)
-				{
-					// start of row 'idxRow'
-					thumbnails[idxRow] = responseTable.NewValue.GetTableCell(idxRow, 9)?.CellValue.GetAsStringValue().Replace(@"http://https//", "https://");
-				}
-
-				string token = string.Empty;
-				Task.Run(async () => { token = await Thumbnail.Login(_loginEntrypoint, _user, _password); }).Wait();
-				RequestStreamThumbnail(engine, thumbnails, token);
+				data2retrieve = rows.ToArray();
 			}
 			catch (Exception ex)
 			{
-				engine.ExitFail($"[Techex MWCore Thumbnails] Exception: {ex}");
-			}
-		}
+				_logger.Error($"Exception: {ex}");
 
-		private static void RequestStreamThumbnail(IEngine engine, IEnumerable<string> thumbnails, string token)
-		{
-			// engine.GenerateInformation($"token: {token}");
-			foreach (var url in thumbnails)
+				data2retrieve = new GQIRow[0];
+			}
+
+			return new GQIPage(data2retrieve)
 			{
-				var fileName = Thumbnail.GetStreamName(url);
-				var filepath = $"{_filesPath}\\{fileName}";
-				Task.Run(async () => await Thumbnail.DownloadImage(engine, token, url, filepath)).Wait();
-			}
-
-			engine.Sleep(5000);
-		}
-	}
-
-	public class Thumbnail
-	{
-		public static async Task DownloadImage(IEngine engine, string token, string apiUrl, string savePath)
-		{
-			using (HttpClient httpClient = new HttpClient(CreateInsecureHandler()))
-			{
-				try
-				{
-					httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-
-					HttpResponseMessage response = await httpClient.GetAsync(apiUrl);
-					response.EnsureSuccessStatusCode();
-
-					byte[] imageBytes = await response.Content.ReadAsByteArrayAsync();
-					await SaveImage(engine, imageBytes, savePath);
-				}
-				catch (Exception ex)
-				{
-					engine.Log($"MWCore Thumbnails|DownloadImage|Exception thrown: {ex}");
-				}
-			}
+				HasNextPage = false,
+			};
 		}
 
-		public static string GetStreamName(string url)
+		public GQIArgument[] GetInputArguments()
 		{
-			var regexGroups = Regex.Match(url, @"\/mwedge\/(?<mwedgeId>\w*)\/stream\/(?<streamId>\w*)").Groups;
-			return $"{regexGroups["streamId"]}.jpg";
+			return new GQIArgument[] { _argumentElementName };
 		}
 
-		public static async Task<string> Login(string url, string user, string password)
+		public OnArgumentsProcessedOutputArgs OnArgumentsProcessed(OnArgumentsProcessedInputArgs args)
 		{
-			string token = string.Empty;
-			using (HttpClient client = new HttpClient(CreateInsecureHandler()))
-			{
-				//login
-				var request = new HttpRequestMessage(HttpMethod.Post, url);
-				var content = new StringContent($"{{\"username\":\"{user}\",\"password\":\"{password}\"}}", null, "application/json");
-				request.Content = content;
-				var response = await client.SendAsync(request);
-				response.EnsureSuccessStatusCode();
-				string responseBody = await response.Content.ReadAsStringAsync();
-
-				token = Convert.ToString(JsonConvert.DeserializeObject<Dictionary<string, object>>(responseBody)["token"]);
-			}
-
-			return token;
+			_elementName = args.GetArgumentValue(_argumentElementName);
+			return new OnArgumentsProcessedOutputArgs();
 		}
 
-		private static HttpClientHandler CreateInsecureHandler()
+		public OnInitOutputArgs OnInit(OnInitInputArgs args)
 		{
-			HttpClientHandler handler = new HttpClientHandler();
-			handler.ServerCertificateCustomValidationCallback = ValidateCertificate;
-			return handler;
-		}
-
-		private static async Task SaveImage(IEngine engine, byte[] imageBytes, string savePath)
-		{
-			try
-			{
-				using (FileStream outputStream = File.Create(savePath))
-				{
-					await outputStream.WriteAsync(imageBytes, 0, imageBytes.Length);
-				}
-			}
-			catch (Exception ex)
-			{
-				engine.Log($"MWCore Thumbnails|SaveImage|Exception thrown: {ex}");
-			}
-		}
-
-		private static bool ValidateCertificate(HttpRequestMessage request, X509Certificate2 certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
-		{
-			// Allow all certificates (bypass SSL certificate validation)
-			return true;
+			_dms = args.DMS;
+			_logger = args.Logger;
+			_logger.MinimumLogLevel = GQILogLevel.Debug;
+			return default;
 		}
 	}
 }
