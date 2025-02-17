@@ -8,12 +8,6 @@
 	<Folder>Techex MWCore</Folder>
 
 	<Protocols>
-		<Protocol id="10">
-			<Description>MWCore Element</Description>
-			<Name>Techex MWCore</Name>
-			<Version>Production</Version>
-			<DefaultElement></DefaultElement>
-		</Protocol>
 	</Protocols>
 
 	<Memory>
