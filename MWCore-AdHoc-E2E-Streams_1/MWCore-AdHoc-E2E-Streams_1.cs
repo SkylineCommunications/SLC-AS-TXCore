@@ -54,13 +54,16 @@ namespace GQIIntegrationSPI
 	using System;
 	using System.Collections.Generic;
 	using System.Linq;
+
 	using MWCoreAdHocE2EStreams_1.Misc;
+
 	using Skyline.DataMiner.Analytics.GenericInterface;
 
 	//using Skyline.DataMiner.Utils.TXCore.Cache;
+	//using Skyline.DataMiner.Utils.TXCore.Cache.Misc;
 	//using Skyline.DataMiner.Utils.TXCore.Cache.Misc.Enums;
 
-	[GQIMetaData(Name = "MWCore E2E Stream")]
+	[GQIMetaData(Name = "MWCore E2E Stream Nuget")]
 	public class GQIDataSourceAdHocE2EStreams : IGQIDataSource, IGQIInputArguments, IGQIOnInit
 	{
 		private readonly GQIStringArgument _argumentEdgeName = new GQIStringArgument("MWEdge Name") { IsRequired = true };
