@@ -187,7 +187,7 @@ namespace GQIIntegrationSPI
 						new GQICell { Value = (hop.Hop_Number == 1 && hop.IOType != 0) || hop.Starting_Point},
 						new GQICell { Value = hop.Hop_Number},
 						new GQICell { Value = hop.IsActive},
-					}));
+				}));
 			}
 
 			// adding an extra line to facilitate the node-edge component
