@@ -104,7 +104,6 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 		/// Get previous hop - look for outputs connected to the started inputs.
 		/// Get next hop - look for inputs that are connected to the started outputs.
 		/// </summary>
-		/// <param name="instance">An instance of <see cref="StreamsIO"/>, representing the data structure containing inputs and outputs.</param>
 		/// <param name="edgeName">The name of the edge to filter connections.</param>
 		/// <param name="streamName">The name of the stream to filter connections.</param>
 		/// <returns>

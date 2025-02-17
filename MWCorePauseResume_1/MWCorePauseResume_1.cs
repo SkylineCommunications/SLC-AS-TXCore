@@ -91,6 +91,7 @@ namespace MWCorePauseResume_1
 				else
 				{
 					engine.GenerateInformation("[Techex MWCore Pause/Resume] Invalid IO Type (Source or Output).");
+					return;
 				}
 
 				string statusToSet = string.Empty;
@@ -106,6 +107,7 @@ namespace MWCorePauseResume_1
 				else
 				{
 					engine.GenerateInformation("[Techex MWCore Pause/Resume] Invalid Status (Pause or Resume).");
+					return;
 				}
 
 				var jsonid = engine.GetScriptParam("IO ID").Value;
@@ -115,6 +117,11 @@ namespace MWCorePauseResume_1
 
 				engine.SetFlag(RunTimeFlags.NoCheckingSets);
 				element.SetParameterByPrimaryKey(paramId, iopk, statusToSet); // enable statistics
+
+				if (status == "Resume" && paramId == 9721)
+				{
+					element.SetParameterByPrimaryKey(9728, iopk, "True"); // enable statistics
+				}
 
 				engine.Sleep(3000);
 				element.SetParameter(200, 1); // refresh
