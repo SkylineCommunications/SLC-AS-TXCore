@@ -99,6 +99,9 @@
 				case "5":
 					return "Normal";
 
+				case "6":
+					return "Error";
+
 				default:
 					return "N/A";
 			}
