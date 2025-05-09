@@ -62,11 +62,13 @@ namespace DownloadThumbnails_1
 	[GQIMetaData(Name = "MWCore Thumbnails")]
 	public class GQIDataSourceAdHocThumbnails : IGQIDataSource, IGQIInputArguments, IGQIOnInit
 	{
+		private const int _pageSize = 100;
 		private readonly GQIStringArgument _argumentElementName = new GQIStringArgument("Element Name") { IsRequired = true };
 
 		private GQIDMS _dms;
 		private IGQILogger _logger;
 		private string _elementName;
+		private int rowsReturned;
 
 		public GQIColumn[] GetColumns()
 		{
@@ -89,13 +91,20 @@ namespace DownloadThumbnails_1
 		public GQIPage GetNextPage(GetNextPageInputArgs args)
 		{
 			GQIRow[] data2retrieve;
+			bool hasNextPage = false;
 			try
 			{
-				var element = ElementCache.Instance(_dms, _logger, _elementName);
+				var element = ElementCache.Instance(_dms, _logger, _elementName, _pageSize);
+
+				element.GetStreamThumbnails(_dms, _logger);
 
 				List<GQIRow> rows = new List<GQIRow>();
 
-				foreach (var stream in element.Streams)
+				int startIndex = rowsReturned == 0 ? 0 : rowsReturned - 1;
+
+				int count = (startIndex + _pageSize) > element.Streams.Count ? element.Streams.Count - startIndex : _pageSize;
+
+				foreach (var stream in element.Streams.GetRange(startIndex, count))
 				{
 					rows.Add(new GQIRow(new[]
 					{
@@ -114,6 +123,10 @@ namespace DownloadThumbnails_1
 				}
 
 				data2retrieve = rows.ToArray();
+				rowsReturned += count;
+				hasNextPage = rowsReturned < element.Streams.Count;
+
+				// _logger.Information($"HasNextPage: {hasNextPage}  RowsReturned: {rowsReturned}  Streams: {element.Streams.Count}");
 			}
 			catch (Exception ex)
 			{
@@ -124,7 +137,7 @@ namespace DownloadThumbnails_1
 
 			return new GQIPage(data2retrieve)
 			{
-				HasNextPage = false,
+				HasNextPage = hasNextPage,
 			};
 		}
 

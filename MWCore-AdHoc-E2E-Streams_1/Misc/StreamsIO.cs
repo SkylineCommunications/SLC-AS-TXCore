@@ -4,11 +4,14 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 {
 	using System;
 	using System.Collections.Generic;
+	using System.Configuration;
+	using System.Globalization;
 	using System.Linq;
 
 	using global::Misc.Enums;
 
 	using Skyline.DataMiner.Analytics.GenericInterface;
+	using Skyline.DataMiner.Automation;
 	using Skyline.DataMiner.Net.Helper;
 	using Skyline.DataMiner.Net.Messages;
 
@@ -18,7 +21,7 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 		private static readonly object _padlock = new object();
 		private static Dictionary<string, ElementCache> _instances = new Dictionary<string, ElementCache>();
 		private readonly GQIDMS _dms;
-		private Dictionary<string, HashSet<Hop>> _hops;
+		private readonly Dictionary<string, HashSet<Hop>> _hops;
 
 		private StreamsIO(GQIDMS dms, string elementName)
 		{
@@ -69,12 +72,19 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 			if (forceRefresh /*&& !_instances.Keys.Any()*/)
 			{
 				var newInstances = new Dictionary<string, ElementCache>();
-				DMSMessage[] responseElement = dms.SendMessages(GetLiteElementInfo.ByProtocol("Techex MWCore", "Production"));// as LiteElementInfoEvent;
+				DMSMessage[] responseElement = dms.SendMessages(GetLiteElementInfo.ByProtocol("Techex MWCore", "Production")); // as LiteElementInfoEvent;
 				foreach (LiteElementInfoEvent item in responseElement)
 				{
-					logger.Debug($"Element: {item.Name}");
-					instance = new ElementCache(new StreamsIO(dms, item.Name), now);
-					newInstances[item.Name] = instance;
+					try
+					{
+						logger.Debug($"Element: {item.Name}");
+						instance = new ElementCache(new StreamsIO(dms, item.Name), now);
+						newInstances[item.Name] = instance;
+					}
+					catch (Exception ex)
+					{
+						logger.Debug($"Fail to update '{item.Name}' cache Element: {ex}");
+					}
 				}
 
 				lock (_padlock)
@@ -329,7 +339,7 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 				Filters = new[] { "forceFullTable=true" /*, "column=xx,yy"*/ },
 			}) as ParameterChangeEventMessage;
 
-			if (!responseEdgesTable.NewValue.IsArray)
+			if (responseEdgesTable == null || !responseEdgesTable.NewValue.IsArray)
 			{
 				return Enumerable.Empty<EdgeTable>();
 			}
@@ -361,19 +371,26 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 				Filters = new[] { "forceFullTable=true" /*, "column=xx,yy"*/ },
 			}) as ParameterChangeEventMessage;
 
-			if (!responseInputsTable.NewValue.IsArray)
+			if (responseInputsTable == null || !responseInputsTable.NewValue.IsArray)
 			{
 				return Enumerable.Empty<Iotable>();
 			}
+
+			var sourceBitrates = GetBitrates(
+				responseElement,
+				(int)MWCorePids.SourcesStatisticsTablePid,
+				"forceFullTable=true;columns=11206");
 
 			var iotable = new List<Iotable>();
 			var cols = responseInputsTable.NewValue.ArrayValue[0].ArrayValue;
 			for (int idxRow = 0; idxRow < cols.Length; idxRow++)
 			{
+				string id = responseInputsTable.NewValue.GetTableCell(idxRow, 0)?.CellValue.GetAsStringValue();
+
 				// start of row 'idxRow'
 				iotable.Add(new Iotable
 				{
-					Id = responseInputsTable.NewValue.GetTableCell(idxRow, 0)?.CellValue.GetAsStringValue(),
+					Id = id,
 					Name = responseInputsTable.NewValue.GetTableCell(idxRow, 1)?.CellValue.GetAsStringValue(),
 					Status = responseInputsTable.NewValue.GetTableCell(idxRow, 20)?.CellValue.GetAsStringValue(),
 					IOType = IOType.Input,
@@ -382,7 +399,7 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 					Ip = responseInputsTable.NewValue.GetTableCell(idxRow, 30)?.CellValue.GetAsStringValue(),
 					Port = responseInputsTable.NewValue.GetTableCell(idxRow, 7)?.CellValue.GetAsStringValue(),
 					Type = responseInputsTable.NewValue.GetTableCell(idxRow, 5)?.CellValue.GetAsStringValue(),
-					Bitrate = 0,
+					Bitrate = sourceBitrates.TryGetValue(id, out double bitrate) ? bitrate : 0,
 					InputState = responseInputsTable.NewValue.GetTableCell(idxRow, 27)?.CellValue.GetAsStringValue(),
 					Protocol = responseInputsTable.NewValue.GetTableCell(idxRow, 3)?.CellValue.GetAsStringValue(),
 				});
@@ -401,19 +418,26 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 				Filters = new[] { "forceFullTable=true" },
 			}) as ParameterChangeEventMessage;
 
-			if (!responseOutputsTable.NewValue.IsArray)
+			if (responseOutputsTable == null || !responseOutputsTable.NewValue.IsArray)
 			{
 				return Enumerable.Empty<Iotable>();
 			}
+
+			var outputBitrates = GetBitrates(
+				responseElement,
+				(int)MWCorePids.OutputsStatisticsTablePid,
+				"forceFullTable=true;columns=11406");
 
 			var iotable = new List<Iotable>();
 			var cols = responseOutputsTable.NewValue.ArrayValue[0].ArrayValue;
 			for (int idxRow = 0; idxRow < cols.Length; idxRow++)
 			{
+				string id = responseOutputsTable.NewValue.GetTableCell(idxRow, 0)?.CellValue.GetAsStringValue();
+
 				// start of row 'idxRow'
 				iotable.Add(new Iotable
 				{
-					Id = responseOutputsTable.NewValue.GetTableCell(idxRow, 0)?.CellValue.GetAsStringValue(),
+					Id = id,
 					Name = responseOutputsTable.NewValue.GetTableCell(idxRow, 1)?.CellValue.GetAsStringValue(),
 					Status = responseOutputsTable.NewValue.GetTableCell(idxRow, 2)?.CellValue.GetAsStringValue(),
 					IOType = IOType.Output,
@@ -423,11 +447,62 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 					Port = responseOutputsTable.NewValue.GetTableCell(idxRow, 5)?.CellValue.GetAsStringValue(),
 					Type = responseOutputsTable.NewValue.GetTableCell(idxRow, 15)?.CellValue.GetAsStringValue(),
 					Protocol = responseOutputsTable.NewValue.GetTableCell(idxRow, 3)?.CellValue.GetAsStringValue(),
-					Bitrate = 0,
+					Bitrate = outputBitrates.TryGetValue(id, out double bitrate) ? bitrate : 0,
 				});
 			}
 
 			return iotable;
+		}
+
+		private Dictionary<string, double> GetBitrates(ElementInfoEventMessage element, int tablePid, string filter = "ForceFullTable=true")
+		{
+			if (element == null)
+			{
+				throw new ArgumentNullException(nameof(element));
+			}
+
+			if (tablePid < 1)
+			{
+				throw new InvalidOperationException($"Invalid Table PID: {tablePid}");
+			}
+
+			var gpm = new GetPartialTableMessage
+			{
+				DataMinerID = element.DataMinerID,
+				ElementID = element.ElementID,
+				ParameterID = tablePid,
+				Filters = filter.Split(';'),
+			};
+
+			var table = _dms.SendMessage(gpm) as ParameterChangeEventMessage;
+			if (table == null)
+			{
+				return new Dictionary<string, double>();
+			}
+
+			var rowsCount = table.NewValue.ArrayValue[0].ArrayValue.Length;
+			var rows = new Dictionary<string, double>();
+
+			for (int i = 0; i < rowsCount; i++)
+			{
+				if (table.NewValue.ArrayValue[0].ArrayValue[i] == null
+					|| table.NewValue.ArrayValue[0].ArrayValue[i].ArrayValue == null
+					|| table.NewValue.ArrayValue[0].ArrayValue[i].ArrayValue[0] == null)
+				{
+					continue;
+				}
+
+				if (table.NewValue.ArrayValue[1].ArrayValue[i] == null
+					|| table.NewValue.ArrayValue[1].ArrayValue[i].ArrayValue == null
+					|| table.NewValue.ArrayValue[1].ArrayValue[i].ArrayValue[0] == null)
+				{
+					continue;
+				}
+
+				rows[table.NewValue.ArrayValue[0].ArrayValue[i].ArrayValue[0].StringValue] = table.NewValue.ArrayValue[1].ArrayValue[i].ArrayValue[0].DoubleValue;
+			}
+
+			return rows;
 		}
 
 		#endregion GetTables

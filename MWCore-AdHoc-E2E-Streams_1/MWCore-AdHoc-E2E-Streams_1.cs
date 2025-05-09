@@ -174,14 +174,14 @@ namespace GQIIntegrationSPI
 						new GQICell { Value = hop.IOType == 0 ? "Source" : "Output" }, // IO SRC
 						new GQICell { Value = hop.Status_Src}, // IO State SRC
 						new GQICell { Value = hop.Type_Src}, // IO Type SRC
-						new GQICell { Value = hop.Bitrate_Src}, // Bitrate SRC
+						new GQICell { Value = hop.Bitrate_Src, DisplayValue = $"{hop.Bitrate_Src:f2} Mbps"}, // Bitrate SRC
 						new GQICell { Value = hop.Stream_Src}, // Stream Name SRC
 						new GQICell { Value = hop.MWEdge_Src}, // Edge Name SRC
 						new GQICell { Value = hop.Id_Dst}, // IO ID SRC
 						new GQICell { Value = hop.Name_Dst}, // IO Name SRC
 						new GQICell { Value = hop.Status_Dst}, // IO State SRC
 						new GQICell { Value = hop.Type_Dst}, // IO Type SRC
-						new GQICell { Value = hop.Bitrate_Dst}, // Bitrate SRC
+						new GQICell { Value = hop.Bitrate_Dst, DisplayValue = $"{hop.Bitrate_Dst:f2} Mbps"}, // Bitrate SRC
 						new GQICell { Value = hop.Stream_Dst}, // Stream Name SRC
 						new GQICell { Value = hop.MWEdge_Dst}, // Edge Name SRC
 						new GQICell { Value = (hop.Hop_Number == 1 && hop.IOType != 0) || hop.Starting_Point},
@@ -202,7 +202,7 @@ namespace GQIIntegrationSPI
 						new GQICell { Value = "Output" }, // IO Type SRC
 						new GQICell { Value = lastHop.Status_Dst }, // IO State SRC
 						new GQICell { Value = lastHop.Type_Dst }, // IO Type SRC
-						new GQICell { Value = lastHop.Bitrate_Dst }, // Bitrate SRC
+						new GQICell { Value = lastHop.Bitrate_Dst, DisplayValue = $"{lastHop.Bitrate_Dst:f2} Mbps" }, // Bitrate SRC
 						new GQICell { Value = lastHop.Stream_Dst }, // Stream Name SRC
 						new GQICell { Value = lastHop.MWEdge_Dst }, // Edge Name SRC
 						new GQICell { Value = string.Empty }, // IO ID SRC
