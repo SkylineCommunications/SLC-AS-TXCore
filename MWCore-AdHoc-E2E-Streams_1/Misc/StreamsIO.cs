@@ -72,12 +72,19 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 			if (forceRefresh /*&& !_instances.Keys.Any()*/)
 			{
 				var newInstances = new Dictionary<string, ElementCache>();
-				DMSMessage[] responseElement = dms.SendMessages(GetLiteElementInfo.ByProtocol("Techex MWCore", "Production"));// as LiteElementInfoEvent;
+				DMSMessage[] responseElement = dms.SendMessages(GetLiteElementInfo.ByProtocol("Techex MWCore", "Production")); // as LiteElementInfoEvent;
 				foreach (LiteElementInfoEvent item in responseElement)
 				{
-					logger.Debug($"Element: {item.Name}");
-					instance = new ElementCache(new StreamsIO(dms, item.Name), now);
-					newInstances[item.Name] = instance;
+					try
+					{
+						logger.Debug($"Element: {item.Name}");
+						instance = new ElementCache(new StreamsIO(dms, item.Name), now);
+						newInstances[item.Name] = instance;
+					}
+					catch (Exception ex)
+					{
+						logger.Debug($"Fail to update '{item.Name}' cache Element: {ex}");
+					}
 				}
 
 				lock (_padlock)
@@ -332,7 +339,7 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 				Filters = new[] { "forceFullTable=true" /*, "column=xx,yy"*/ },
 			}) as ParameterChangeEventMessage;
 
-			if (!responseEdgesTable.NewValue.IsArray)
+			if (responseEdgesTable == null || !responseEdgesTable.NewValue.IsArray)
 			{
 				return Enumerable.Empty<EdgeTable>();
 			}
@@ -364,7 +371,7 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 				Filters = new[] { "forceFullTable=true" /*, "column=xx,yy"*/ },
 			}) as ParameterChangeEventMessage;
 
-			if (!responseInputsTable.NewValue.IsArray)
+			if (responseInputsTable == null || !responseInputsTable.NewValue.IsArray)
 			{
 				return Enumerable.Empty<Iotable>();
 			}
@@ -411,7 +418,7 @@ namespace MWCoreAdHocE2EStreams_1.Misc
 				Filters = new[] { "forceFullTable=true" },
 			}) as ParameterChangeEventMessage;
 
-			if (!responseOutputsTable.NewValue.IsArray)
+			if (responseOutputsTable == null || !responseOutputsTable.NewValue.IsArray)
 			{
 				return Enumerable.Empty<Iotable>();
 			}
